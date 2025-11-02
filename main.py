@@ -1,72 +1,42 @@
 import os
+import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
 from schemas import ChatRequest, BookRequest, CancelRequest, ListRequest
-from cal_client import CalClient
-from openai_client import OpenAIClient, extract_function_call
+from openai_client import extract_function_call
+from utils import build_booking_payload, create_clients
+from mcp_tools import FUNCTIONS
+from logging_config import configure_logging
+from exceptions import ClientInitError
 
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 
 app = FastAPI(title="Cal.com Chatbot (Function-calling)")
 
-# Instantiate Cal client using CAL_COM_API_KEY loaded from .env
-# We explicitly pass the API key from environment to ensure the client
-# uses the value loaded by load_dotenv above.
-cal = None
-openai = None
-try:
-    cal_api_key = os.environ.get("CAL_COM_API_KEY")
-    cal_base_url = os.environ.get("CAL_COM_BASE_URL", "https://api.cal.com")
-    cal = CalClient(api_key=cal_api_key, base_url=cal_base_url)
-    
-    openai_api_key = os.environ.get("OPENAI_API_KEY")
-    openai = OpenAIClient(api_key=openai_api_key)
-except Exception as e:
-    # Keep app running but mark cal as None when not configured
-    cal = None
-    openai = None
-    print(f"Warning: CalClient or OpenAIClient not configured properly. {e}")
+# Configure logging
+configure_logging()
+logger = logging.getLogger(__name__)
 
 
-FUNCTIONS = [
-    {
-        "name": "list_bookings",
-        "description": "List bookings for a user by email",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "user_email": {"type": "string", "format": "email"},
-                "status": {"type": "string", "enum": ["upcoming", "recurring", "past", "cancelled", "unconfirmed"]},
-            },
-            "required": [],
-        },
-    },
-    {
-        "name": "create_booking",
-        "description": "Create a new booking using cal.com",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "start_time": {"type": "string"},
-                "customer_name": {"type": "string"},
-                "customer_email": {"type": "string", "format": "email"},
-            },
-            "required": ["start_time", "customer_name", "customer_email"],
-        },
-    },
-    {
-        "name": "cancel_booking",
-        "description": "Cancel an existing booking by booking id",
-        "parameters": {
-            "type": "object",
-            "properties": {"booking_id": {"type": "string"}},
-            "required": ["booking_id"],
-        },
-    },
-]
+@app.on_event("startup")
+def startup_event() -> None:
+    """Initialize external clients and attach them to the app state.
+
+    This keeps initialization out of the module import path and makes the
+    application easier to test.
+    """
+    try:
+        cal_client, openai_client = create_clients()
+        app.state.cal = cal_client
+        app.state.openai = openai_client
+        logger.info("External clients initialized")
+    except ClientInitError as e:
+        # Fail early: startup without clients is not supported in the new model
+        logger.exception("Failed to initialize external clients: %s", e)
+        raise
 
 
 @app.post("/chat")
@@ -78,14 +48,14 @@ async def chat(req: ChatRequest):
     - If the model returns a function call, execute the corresponding cal client method
     - Return the final result to the caller
     """
-    if cal is None:
+    if not getattr(app.state, "cal", None):
         raise HTTPException(status_code=500, detail="Cal.com client not configured (missing CAL_COM_API_KEY)")
 
     system = {"role": "system", "content": "You are an assistant that helps users book, list and cancel events using Cal.com. Ask clarifying questions if needed."}
     user = {"role": "user", "content": f"{req.message} (user email: {req.user_email})"}
 
     try:
-        resp = openai.call_chat_completion([system, user], functions=FUNCTIONS)
+        resp = app.state.openai.call_chat_completion([system, user], functions=FUNCTIONS)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -96,35 +66,25 @@ async def chat(req: ChatRequest):
         args = fc.get("arguments") or {}
         try:
             if name == "list_bookings":
-                params = {
-                    "take": "100",
-                    "status": args.get("status"),
-                    "attendeeEmail": args.get("user_email"),
-                }
-                result = cal.list_bookings(params)
+                result = app.state.cal.list_bookings(
+                    {
+                        "take": "100",
+                        "status": args.get("status"),
+                        "attendeeEmail": args.get("user_email"),
+                    }
+                )
             elif name == "create_booking":
                 # translate args to create payload expected by cal.com
-                payload = {
-                    "start": args.get("start_time"),
-                    "attendee": {
-                        "name": args.get("customer_name"),
-                        "email": args.get("customer_email"),
-                        "timeZone": "America/Los_Angeles",
-                        "language": "en"
-                    },
-                    "eventTypeId": 3778941,
-                    "eventTypeSlug": "30min",
-                    "location": {
-                        "type": "integration",
-                        "integration": "google-meet"
-                    },
-                    "metadata": {
-                        "note": "chat booking"
-                    }
-                }
-                result = cal.create_booking(payload)
+                result = app.state.cal.create_booking(
+                    build_booking_payload(
+                        start=args.get("start_time"),
+                        customer_name=args.get("customer_name"),
+                        customer_email=args.get("customer_email"),
+                        note="chat booking",
+                    )
+                )
             elif name == "cancel_booking":
-                result = cal.cancel_booking(args["booking_id"])
+                result = app.state.cal.cancel_booking(args["booking_id"])
             else:
                 result = {"error": "unknown function"}
         except Exception as e:
@@ -138,34 +98,25 @@ async def chat(req: ChatRequest):
         msg = resp.choices[0]
     except Exception:
         msg = str(resp)
+
     return {"assistant": msg}
 
 
 @app.post("/book")
 async def book(req: BookRequest):
-    if cal is None:
+    if not getattr(app.state, "cal", None):
         raise HTTPException(status_code=500, detail="Cal.com client not configured")
-    payload = {
-        "eventTypeId": req.event_type_id,
-        "start": req.start_time,
-        "attendee": {
-            "name": req.customer_name, 
-            "email": req.customer_email,
-            "timeZone": "America/Los_Angeles",
-            "language": "en"
-        },
-        "eventTypeId": 3778941,
-        "eventTypeSlug": "30min",
-        "location": {
-            "type": "integration",
-            "integration": "google-meet"
-        },
-        "metadata": {
-            "note": "API booking"
-        }
-    }
+    
     try:
-        result = cal.create_booking(payload)
+        result = app.state.cal.create_booking(
+            build_booking_payload(
+                start=req.start_time,
+                customer_name=req.customer_name,
+                customer_email=req.customer_email,
+                event_type_id=req.event_type_id,
+                note="API booking",
+            )
+        )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -173,11 +124,12 @@ async def book(req: BookRequest):
 
 @app.post("/list")
 async def list_bookings(req: ListRequest):
-    if cal is None:
+    if not getattr(app.state, "cal", None):
         raise HTTPException(status_code=500, detail="Cal.com client not configured")
+    
     try:
         params = {"attendeeEmail": req.user_email, "take": 100}
-        result = cal.list_bookings(params)
+        result = app.state.cal.list_bookings(params)
         return {"bookings": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -185,10 +137,11 @@ async def list_bookings(req: ListRequest):
 
 @app.post("/cancel")
 async def cancel(req: CancelRequest):
-    if cal is None:
+    if not getattr(app.state, "cal", None):
         raise HTTPException(status_code=500, detail="Cal.com client not configured")
+    
     try:
-        result = cal.cancel_booking(req.booking_id)
+        result = app.state.cal.cancel_booking(req.booking_id)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -197,4 +150,5 @@ async def cancel(req: CancelRequest):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("server.main:app", host="0.0.0.0", port=8000, reload=True)
+    # When running directly, point uvicorn to this module's app
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

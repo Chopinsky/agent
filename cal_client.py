@@ -1,7 +1,11 @@
 import os
-from typing import Optional, Dict, Any, List
+import logging
+from typing import Optional, Dict, Any
 
 import requests
+
+logger = logging.getLogger(__name__)
+from exceptions import CalClientError
 
 # Environment / defaults
 CAL_API_KEY = os.environ.get("CAL_COM_API_KEY")
@@ -37,7 +41,7 @@ class CalClient:
         self.api_key = api_key or CAL_API_KEY
         self.base = (base_url or CAL_BASE).rstrip("/")
         if not self.api_key:
-            raise ValueError("CAL_COM_API_KEY is not set in environment or passed to CalClient")
+            raise CalClientError("CAL_COM_API_KEY is not set in environment or passed to CalClient")
 
         self.timeout = timeout
 
@@ -66,15 +70,20 @@ class CalClient:
         Returns the parsed JSON response (the docs return an object with keys
         `status`, `data`, and `pagination`).
         """
+        url = f"{self.base}/v2/bookings"
+        headers = self._headers_for(bookings=True)
         try:
-            url = f"{self.base}/v2/bookings"
-            headers = self._headers_for(bookings=True)
-            resp = requests.get(url, headers=headers, params=params or {}, timeout=self.timeout)
-            resp.raise_for_status()
-            return resp.json()
+            with requests.Session() as session:
+                resp = session.get(url, headers=headers, params=params or {}, timeout=self.timeout)
+                resp.raise_for_status()
+                return resp.json()
+        except requests.HTTPError as e:
+            resp_text = getattr(e.response, "text", None)
+            logger.exception("Cal.com list_bookings HTTP error: %s - Response: %s", e, resp_text)
+            raise CalClientError(f"list_bookings failed: {resp_text}") from e
         except Exception as e:
-            print(f"\nCal.com create_booking error: {e} - Response: {e.response.text}")
-            raise e
+            logger.exception("Cal.com list_bookings unexpected error: %s", e)
+            raise CalClientError("list_bookings failed") from e
 
     def create_booking(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Create a booking using POST /v2/bookings.
@@ -83,15 +92,20 @@ class CalClient:
         endpoint supports regular, instant and recurring bookings depending on
         the provided payload.
         """
+        url = f"{self.base}/v2/bookings"
+        headers = self._headers_for(bookings=True)
         try:
-            url = f"{self.base}/v2/bookings"
-            headers = self._headers_for(bookings=True)
-            resp = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
-            resp.raise_for_status()
-            return resp.json()
+            with requests.Session() as session:
+                resp = session.post(url, headers=headers, json=payload, timeout=self.timeout)
+                resp.raise_for_status()
+                return resp.json()
+        except requests.HTTPError as e:
+            resp_text = getattr(e.response, "text", None)
+            logger.exception("Cal.com create_booking HTTP error: %s - Response: %s", e, resp_text)
+            raise CalClientError(f"create_booking failed: {resp_text}") from e
         except Exception as e:
-            print(f"\nCal.com create_booking error: {e} - Response: {e.response.text}")
-            raise e
+            logger.exception("Cal.com create_booking unexpected error: %s", e)
+            raise CalClientError("create_booking failed") from e
 
     def cancel_booking(self, booking_uid: str, body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Cancel a booking using POST /v2/bookings/{bookingUid}/cancel.
@@ -100,15 +114,20 @@ class CalClient:
         can include `cancellationReason`, `cancelSubsequentBookings`, `seatUid`, etc.
         Returns the parsed JSON response.
         """
+        url = f"{self.base}/v2/bookings/{booking_uid}/cancel"
+        headers = self._headers_for(bookings=True)
         try:
-            url = f"{self.base}/v2/bookings/{booking_uid}/cancel"
-            headers = self._headers_for(bookings=True)
-            resp = requests.post(url, headers=headers, json=body or {}, timeout=self.timeout)
-            resp.raise_for_status()
-            return resp.json()
+            with requests.Session() as session:
+                resp = session.post(url, headers=headers, json=body or {}, timeout=self.timeout)
+                resp.raise_for_status()
+                return resp.json()
+        except requests.HTTPError as e:
+            resp_text = getattr(e.response, "text", None)
+            logger.exception("Cal.com cancel_booking HTTP error: %s - Response: %s", e, resp_text)
+            raise CalClientError(f"cancel_booking failed: {resp_text}") from e
         except Exception as e:
-            print(f"\nCal.com cancel_booking error: {e} - Response: {e.response.text}")
-            raise e
+            logger.exception("Cal.com cancel_booking unexpected error: %s", e)
+            raise CalClientError("cancel_booking failed") from e
 
 
 __all__ = ["CalClient"]

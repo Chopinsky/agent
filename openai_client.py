@@ -1,8 +1,11 @@
 import os
 import json
+import logging
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 
 # Default API key read from environment; can be overridden when constructing OpenAIClient
 DEFAULT_OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
@@ -34,7 +37,7 @@ class OpenAIClient:
         try:
             self._client = OpenAI(api_key=self.api_key)
         except Exception as e:
-            print(f"Warning: OpenAIClient not configured properly. {e}")
+            logger.exception("OpenAIClient not configured properly: %s", e)
             self._client = None
 
     def call_chat_completion(
@@ -73,7 +76,7 @@ def extract_function_call(resp: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
     try:
         choice = resp.choices[0]
-        if choice.finish_reason == 'function_call' and choice.message is not None:
+        if choice.finish_reason == "function_call" and choice.message is not None:
             fc = choice.message.function_call
             name = fc.name
             args_text = fc.arguments or "{}"
@@ -83,12 +86,12 @@ def extract_function_call(resp: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             except Exception:
                 # sometimes arguments are already a dict
                 args = args_text
-                
+
             return {"name": name, "arguments": args}
     except Exception as e:
-        print(f"Error extracting function call: {e}")
+        logger.exception("Error extracting function call: %s", e)
 
-    return None 
+    return None
 
 
 __all__ = ["OpenAIClient", "extract_function_call"]
