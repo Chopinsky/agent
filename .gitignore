@@ -1,0 +1,8 @@
+/.env
+
+# Ignore Python bytecode cache directories anywhere in the repo
+__pycache__/
+**/__pycache__/**
+
+.venv
+**/__pycache__/
