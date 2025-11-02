@@ -13,11 +13,15 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 app = FastAPI(title="Cal.com Chatbot (Function-calling)")
 
-# Instantiate Cal client (will read CAL_COM_API_KEY from environment)
+# Instantiate Cal client using CAL_COM_API_KEY loaded from .env
+# We explicitly pass the API key from environment to ensure the client
+# uses the value loaded by load_dotenv above.
+cal = None
 try:
-    cal = CalClient()
-except Exception as e:
-    # Keep app running but mark cal as None
+    cal_api_key = os.environ.get("CAL_COM_API_KEY")
+    cal = CalClient(api_key=cal_api_key)
+except Exception:
+    # Keep app running but mark cal as None when not configured
     cal = None
 
 
@@ -142,8 +146,22 @@ async def book(req: BookRequest):
         "eventTypeId": req.event_type_id,
         "start": req.start_time,
         "end": req.end_time,
-        "attendee": {"name": req.customer_name, "email": req.customer_email},
-        "notes": req.notes,
+        "attendee": {
+            "name": req.customer_name, 
+            "email": req.customer_email,
+            "timeZone": "America/Los_Angeles",
+            "language": "en"
+        },
+        "eventTypeId": 3778941,
+        "eventTypeSlug": "30min",
+        "location": {
+            "type": "integration",
+            "integration": "google-meet"
+        },
+        "metadata": {
+            "key": "value"
+        },
+        "lengthInMinutes": 30
     }
     try:
         result = cal.create_booking(payload)
