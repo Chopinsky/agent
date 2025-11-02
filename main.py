@@ -51,7 +51,6 @@ FUNCTIONS = [
             "type": "object",
             "properties": {
                 "start_time": {"type": "string"},
-                "end_time": {"type": "string"},
                 "customer_name": {"type": "string"},
                 "customer_email": {"type": "string", "format": "email"},
             },
@@ -107,7 +106,6 @@ async def chat(req: ChatRequest):
                 # translate args to create payload expected by cal.com
                 payload = {
                     "start": args.get("start_time"),
-                    "end": args.get("end_time"),
                     "attendee": {
                         "name": args.get("customer_name"),
                         "email": args.get("customer_email"),
@@ -121,9 +119,8 @@ async def chat(req: ChatRequest):
                         "integration": "google-meet"
                     },
                     "metadata": {
-                        "key": "value"
-                    },
-                    "lengthInMinutes": 30
+                        "note": "chat booking"
+                    }
                 }
                 result = cal.create_booking(payload)
             elif name == "cancel_booking":
@@ -138,7 +135,7 @@ async def chat(req: ChatRequest):
 
     # otherwise return the assistant text
     try:
-        msg = resp["choices"][0]["message"]["content"]
+        msg = resp.choices[0]
     except Exception:
         msg = str(resp)
     return {"assistant": msg}
@@ -151,7 +148,6 @@ async def book(req: BookRequest):
     payload = {
         "eventTypeId": req.event_type_id,
         "start": req.start_time,
-        "end": req.end_time,
         "attendee": {
             "name": req.customer_name, 
             "email": req.customer_email,
@@ -165,9 +161,8 @@ async def book(req: BookRequest):
             "integration": "google-meet"
         },
         "metadata": {
-            "key": "value"
-        },
-        "lengthInMinutes": 30
+            "note": "API booking"
+        }
     }
     try:
         result = cal.create_booking(payload)

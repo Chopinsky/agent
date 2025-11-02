@@ -66,11 +66,15 @@ class CalClient:
         Returns the parsed JSON response (the docs return an object with keys
         `status`, `data`, and `pagination`).
         """
-        url = f"{self.base}/v2/bookings"
-        headers = self._headers_for(bookings=True)
-        resp = requests.get(url, headers=headers, params=params or {}, timeout=self.timeout)
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            url = f"{self.base}/v2/bookings"
+            headers = self._headers_for(bookings=True)
+            resp = requests.get(url, headers=headers, params=params or {}, timeout=self.timeout)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            print(f"\nCal.com create_booking error: {e} - Response: {e.response.text}")
+            raise e
 
     def create_booking(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Create a booking using POST /v2/bookings.
@@ -79,11 +83,15 @@ class CalClient:
         endpoint supports regular, instant and recurring bookings depending on
         the provided payload.
         """
-        url = f"{self.base}/v2/bookings"
-        headers = self._headers_for(bookings=True)
-        resp = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            url = f"{self.base}/v2/bookings"
+            headers = self._headers_for(bookings=True)
+            resp = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            print(f"\nCal.com create_booking error: {e} - Response: {e.response.text}")
+            raise e
 
     def cancel_booking(self, booking_uid: str, body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Cancel a booking using POST /v2/bookings/{bookingUid}/cancel.
@@ -92,11 +100,15 @@ class CalClient:
         can include `cancellationReason`, `cancelSubsequentBookings`, `seatUid`, etc.
         Returns the parsed JSON response.
         """
-        url = f"{self.base}/v2/bookings/{booking_uid}/cancel"
-        headers = self._headers_for(bookings=True)
-        resp = requests.post(url, headers=headers, json=body or {}, timeout=self.timeout)
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            url = f"{self.base}/v2/bookings/{booking_uid}/cancel"
+            headers = self._headers_for(bookings=True)
+            resp = requests.post(url, headers=headers, json=body or {}, timeout=self.timeout)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            print(f"\nCal.com cancel_booking error: {e} - Response: {e.response.text}")
+            raise e
 
 
 __all__ = ["CalClient"]

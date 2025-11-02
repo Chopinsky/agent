@@ -72,21 +72,22 @@ def extract_function_call(resp: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     Returns {'name': <str>, 'arguments': <dict>} or None.
     """
     try:
-        choice = resp["choices"][0]
-        # Different OpenAI client versions place the message in different spots
-        message = choice.get("message") or choice.get("delta") or {}
-        if message and message.get("function_call"):
-            fc = message["function_call"]
-            name = fc.get("name")
-            args_text = fc.get("arguments") or "{}"
+        choice = resp.choices[0]
+        if choice.finish_reason == 'function_call' and choice.message is not None:
+            fc = choice.message.function_call
+            name = fc.name
+            args_text = fc.arguments or "{}"
+
             try:
                 args = json.loads(args_text)
             except Exception:
                 # sometimes arguments are already a dict
                 args = args_text
+                
             return {"name": name, "arguments": args}
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Error extracting function call: {e}")
+
     return None 
 
 
