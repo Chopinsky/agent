@@ -25,9 +25,17 @@ class OpenAIClient:
         self.timeout = timeout
 
         # Create an OpenAI client instance from the new v1 interface.
-        # Passing `api_key=None` is fine; the client will use environment vars
-        # if available.
-        self._client = OpenAI(api_key=self.api_key)
+        # Some OpenAI client builds may not accept `api_key` in the constructor
+        # (or may pass unexpected kwargs). To be robust, set the environment
+        # variable and instantiate the client without kwargs.
+        if self.api_key:
+            os.environ["OPENAI_API_KEY"] = self.api_key
+
+        try:
+            self._client = OpenAI(api_key=self.api_key)
+        except Exception as e:
+            print(f"Warning: OpenAIClient not configured properly. {e}")
+            self._client = None
 
     def call_chat_completion(
         self,

@@ -1,15 +1,14 @@
 import os
-import json
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
-from server.schemas import ChatRequest, BookRequest, CancelRequest, ListRequest
-from server.cal_client import CalClient
-from server.openai_client import call_chat_completion, extract_function_call
+from schemas import ChatRequest, BookRequest, CancelRequest, ListRequest
+from cal_client import CalClient
+from openai_client import OpenAIClient, extract_function_call
 
 
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 
 app = FastAPI(title="Cal.com Chatbot (Function-calling)")
 
@@ -17,12 +16,19 @@ app = FastAPI(title="Cal.com Chatbot (Function-calling)")
 # We explicitly pass the API key from environment to ensure the client
 # uses the value loaded by load_dotenv above.
 cal = None
+openai = None
 try:
     cal_api_key = os.environ.get("CAL_COM_API_KEY")
-    cal = CalClient(api_key=cal_api_key)
-except Exception:
+    cal_base_url = os.environ.get("CAL_COM_BASE_URL", "https://api.cal.com")
+    cal = CalClient(api_key=cal_api_key, base_url=cal_base_url)
+    
+    openai_api_key = os.environ.get("OPENAI_API_KEY")
+    openai = OpenAIClient(api_key=openai_api_key)
+except Exception as e:
     # Keep app running but mark cal as None when not configured
     cal = None
+    openai = None
+    print(f"Warning: CalClient or OpenAIClient not configured properly. {e}")
 
 
 FUNCTIONS = [
@@ -80,7 +86,7 @@ async def chat(req: ChatRequest):
     user = {"role": "user", "content": f"{req.message} (user email: {req.user_email})"}
 
     try:
-        resp = call_chat_completion([system, user], functions=FUNCTIONS)
+        resp = openai.call_chat_completion([system, user], functions=FUNCTIONS)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
