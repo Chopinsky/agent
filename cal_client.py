@@ -1,11 +1,12 @@
-import os
 import logging
-from typing import Optional, Dict, Any
+import os
+from typing import Any, Dict, Optional
 
 import requests
 
-logger = logging.getLogger(__name__)
 from exceptions import CalClientError
+
+logger = logging.getLogger(__name__)
 
 # Environment / defaults
 CAL_API_KEY = os.environ.get("CAL_COM_API_KEY")

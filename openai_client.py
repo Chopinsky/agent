@@ -1,6 +1,6 @@
-import os
 import json
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
@@ -52,13 +52,15 @@ class OpenAIClient:
         Returns the raw API response (dict-like).
         """
         if not self.api_key:
-            raise RuntimeError("OPENAI_API_KEY is not set in environment or passed to OpenAIClient")
+            raise RuntimeError(
+                "OPENAI_API_KEY is not set in environment or passed to OpenAIClient")
 
         kwargs: Dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "temperature": temperature,
         }
+
         if functions:
             kwargs["functions"] = functions
             # allow explicit override of function_call; default to auto when functions present
@@ -66,6 +68,7 @@ class OpenAIClient:
 
         # Use the v1 client: client.chat.completions.create(...)
         resp = self._client.chat.completions.create(**kwargs)
+
         return resp
 
 

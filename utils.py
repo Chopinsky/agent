@@ -1,8 +1,10 @@
 import logging
-from typing import Optional, Dict, Any, Tuple
+import os
+from typing import Any, Dict, Optional, Tuple
+
+from exceptions import ClientInitError
 
 logger = logging.getLogger(__name__)
-from exceptions import ClientInitError
 
 
 def build_booking_payload(

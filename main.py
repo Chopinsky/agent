@@ -1,15 +1,16 @@
-import os
 import logging
+import os
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
-from dotenv import load_dotenv
 
-from schemas import ChatRequest, BookRequest, CancelRequest, ListRequest
-from openai_client import extract_function_call
-from utils import build_booking_payload, create_clients
-from mcp_tools import FUNCTIONS
-from logging_config import configure_logging
 from exceptions import ClientInitError
+from logging_config import configure_logging
+from mcp_tools import FUNCTIONS
+from openai_client import extract_function_call
+from schemas import ChatRequest, BookRequest, CancelRequest, ListRequest
+from utils import build_booking_payload, create_clients
 
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
