@@ -4,9 +4,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
-from .schemas import ChatRequest, BookRequest, CancelRequest, ListRequest
-from .cal_client import CalClient
-from .openai_client import call_chat_completion, extract_function_call
+from server.schemas import ChatRequest, BookRequest, CancelRequest, ListRequest
+from server.cal_client import CalClient
+from server.openai_client import call_chat_completion, extract_function_call
 
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -142,7 +142,7 @@ async def book(req: BookRequest):
         "eventTypeId": req.event_type_id,
         "start": req.start_time,
         "end": req.end_time,
-        "customer": {"name": req.customer_name, "email": req.customer_email},
+        "attendee": {"name": req.customer_name, "email": req.customer_email},
         "notes": req.notes,
     }
     try:
@@ -157,7 +157,8 @@ async def list_bookings(req: ListRequest):
     if cal is None:
         raise HTTPException(status_code=500, detail="Cal.com client not configured")
     try:
-        result = cal.list_bookings(req.user_email)
+        params = {"attendeeEmail": req.user_email, "take": 100}
+        result = cal.list_bookings(params)
         return {"bookings": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
