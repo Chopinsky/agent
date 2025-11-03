@@ -1,9 +1,10 @@
-fastapi==0.120.0
+fastapi==0.116.2
 httpx==0.28.0
-uvicorn[standard]==0.22.0
+uvicorn[standard]==0.35
 python-dotenv==1.0.0
 requests==2.31.0
 openai==2.6.0
+chainlit==2.8.0
 
 # Add explicit pydantic dependency (upgrade to v2 series)
 pydantic>=2.0,<3.0
